@@ -12,39 +12,46 @@ const Bing = require('node-bing-api')({
 const upload = multer({ dest: 'uploads/' });
 
 // Adjusts first item and amount to skip by the page specified by the user
-const sendBingResults = (bingApi, id, page, callback) => {
-  const top = page * 10;
-  const skip = 10 * page - 10;
-  bingApi.images(id, { top, skip }, callback);
+const sendBingResults = (bingApi, query, page = '1', callback) => {
+  // Max is 50 for API
+  const number = parseInt(page) * 10;
+  // Appears to not affect results like it should
+  // const skip = (10 * page) - 10;
+  // console.log(`Number: ${number}\nSkip: ${skip}`);
+  bingApi.images(query, { top: number, skip: 0 }, callback);
 };
 
 app.use(express.static(path.join(__dirname, 'views')));
-
-app.listen(process.env.PORT || 5000);
-
 
 app.get('/api/imagesearch/:id', (req, res) => {
   const id = req.params.id;
   const page = req.query.offset;
 
-  let arr = [];
-
   sendBingResults(Bing, id, page, (error, bingRes, body) => {
-    console.log('started');
-    console.log(body);
-    for (let i = 0; i < 9; i++) {
-      arr = arr.concat({
-        url: body.value[i].contentUrl,
-        snippet: body.value[i].name,
-        thumbnail: body.value[i].thumbnailUrl,
-        context:body.value[i].hostPageDisplayUrl
-      });
+    if (error) {
+      console.error(error);
+      return res.send(error);
+    } else if (page >= 5 || page <= 0) {
+      console.log('Offset out of range (1 - 5)');
+      return res.status(500).send('Offset out of range (1 - 5)');
     }
-    console.log(arr);
-    res.json(arr);
+
+    const SKIP = (parseInt(page) * 10) - 10;
+    return res.json(
+      body.value.slice(SKIP, SKIP + 10).map(imageObj => {
+        return {
+          url: imageObj.contentUrl,
+          snippet: imageObj.name,
+          thumbnail: imageObj.thumbnailUrl,
+          context: imageObj.hostPageDisplayUrl
+        };
+      })
+    );
   });
 });
 
 app.get('/', (req, res) => {
   res.render('index.html');
 });
+
+app.listen(process.env.PORT || 5000, () => console.log('Awaiting requests...'));
